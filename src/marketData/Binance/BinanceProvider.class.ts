@@ -23,12 +23,18 @@ const timeframe_to_binance = {
     M: '1M', // 1 month
 };
 
-import { IProvider, ISymbolInfo } from '@pinets/marketData/IProvider';
+import { ISymbolInfo } from '@pinets/marketData/IProvider';
+import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { stripTickerModifier } from '../../tickerModifier';
+import { Kline, INTERVAL_DURATION_MS } from '@pinets/marketData/types';
 
 interface CacheEntry<T> {
     data: T;
     timestamp: number;
 }
+
+/** Config for BinanceProvider (no API key needed). */
+export interface BinanceProviderConfig {}
 
 class CacheManager<T> {
     private cache: Map<string, CacheEntry<T>>;
@@ -84,11 +90,12 @@ class CacheManager<T> {
     }
 }
 
-export class BinanceProvider implements IProvider {
-    private cacheManager: CacheManager<any[]>;
+export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
+    private cacheManager: CacheManager<Kline[]>;
     private activeApiUrl: string | null = null; // Persist the working endpoint
 
     constructor() {
+        super({ requiresApiKey: false, providerName: 'Binance' });
         this.cacheManager = new CacheManager(5 * 60 * 1000); // 5 minutes cache duration
     }
 
@@ -135,7 +142,53 @@ export class BinanceProvider implements IProvider {
         return BINANCE_API_URL_DEFAULT;
     }
 
-    async getMarketDataInterval(tickerId: string, timeframe: string, sDate: number, eDate: number): Promise<any> {
+    /**
+     * Fetch a single chunk of raw kline data from the Binance API (no closeTime normalization).
+     * Used internally by pagination methods that assemble chunks before normalizing.
+     */
+    private async _fetchRawChunk(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
+        const interval = timeframe_to_binance[timeframe.toUpperCase()];
+        if (!interval) {
+            console.error(`Unsupported timeframe: ${timeframe}`);
+            return [];
+        }
+
+        const baseUrl = await this.getBaseUrl();
+        let url = `${baseUrl}/klines?symbol=${tickerId}&interval=${interval}`;
+
+        if (limit) {
+            url += `&limit=${Math.min(limit, 1000)}`;
+        }
+        if (sDate) {
+            url += `&startTime=${sDate}`;
+        }
+        if (eDate) {
+            url += `&endTime=${eDate}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+
+        return result.map((item) => ({
+            openTime: parseInt(item[0]),
+            open: parseFloat(item[1]),
+            high: parseFloat(item[2]),
+            low: parseFloat(item[3]),
+            close: parseFloat(item[4]),
+            volume: parseFloat(item[5]),
+            closeTime: parseInt(item[6]),
+            quoteAssetVolume: parseFloat(item[7]),
+            numberOfTrades: parseInt(item[8]),
+            takerBuyBaseAssetVolume: parseFloat(item[9]),
+            takerBuyQuoteAssetVolume: parseFloat(item[10]),
+            ignore: item[11],
+        }));
+    }
+
+    async getMarketDataInterval(tickerId: string, timeframe: string, sDate: number, eDate: number): Promise<Kline[]> {
         try {
             const interval = timeframe_to_binance[timeframe.toUpperCase()];
             if (!interval) {
@@ -143,24 +196,10 @@ export class BinanceProvider implements IProvider {
                 return [];
             }
 
-            const timeframeDurations = {
-                '1m': 60 * 1000,
-                '3m': 3 * 60 * 1000,
-                '5m': 5 * 60 * 1000,
-                '15m': 15 * 60 * 1000,
-                '30m': 30 * 60 * 1000,
-                '1h': 60 * 60 * 1000,
-                '2h': 2 * 60 * 60 * 1000,
-                '4h': 4 * 60 * 60 * 1000,
-                '1d': 24 * 60 * 60 * 1000,
-                '1w': 7 * 24 * 60 * 60 * 1000,
-                '1M': 30 * 24 * 60 * 60 * 1000,
-            };
-
-            let allData = [];
+            let allData: Kline[] = [];
             let currentStart = sDate;
             const endTime = eDate;
-            const intervalDuration = timeframeDurations[interval];
+            const intervalDuration = INTERVAL_DURATION_MS[interval];
 
             if (!intervalDuration) {
                 console.error(`Duration not defined for interval: ${interval}`);
@@ -170,32 +209,65 @@ export class BinanceProvider implements IProvider {
             while (currentStart < endTime) {
                 const chunkEnd = Math.min(currentStart + 1000 * intervalDuration, endTime);
 
-                const data = await this.getMarketData(
-                    tickerId,
-                    timeframe,
-                    1000, // Max allowed by Binance
-                    currentStart,
-                    chunkEnd
-                );
+                const data = await this._fetchRawChunk(tickerId, timeframe, 1000, currentStart, chunkEnd);
 
                 if (data.length === 0) break;
 
                 allData = allData.concat(data);
 
-                // CORRECTED LINE: Remove *1000 since closeTime is already in milliseconds
+                // Raw closeTime is (nextBarOpen - 1ms), so +1 gives the correct pagination cursor
                 currentStart = data[data.length - 1].closeTime + 1;
-
-                // Keep this safety check to exit when we get less than full page
-                //if (data.length < 1000) break;
             }
 
+            // Normalize closeTime on the fully assembled data
+            this.normalizeCloseTime(allData);
             return allData;
         } catch (error) {
             console.error('Error in getMarketDataInterval:', error);
             return [];
         }
     }
-    async getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any> {
+
+    private async getMarketDataBackwards(tickerId: string, timeframe: string, limit: number, endTime?: number): Promise<Kline[]> {
+        let remaining = limit;
+        let allData: Kline[] = [];
+        let currentEndTime = endTime;
+
+        // Safety break to prevent infinite loops
+        let iterations = 0;
+        const maxIterations = Math.ceil(limit / 1000) + 5;
+
+        while (remaining > 0 && iterations < maxIterations) {
+            iterations++;
+            const fetchSize = Math.min(remaining, 1000);
+
+            // Fetch raw batch (no normalization yet)
+            const data = await this._fetchRawChunk(tickerId, timeframe, fetchSize, undefined, currentEndTime);
+
+            if (data.length === 0) break;
+
+            // Prepend data since we fetch most recent first
+            allData = data.concat(allData);
+            remaining -= data.length;
+
+            // Update end time for next batch to be just before the oldest candle we got
+            currentEndTime = data[0].openTime - 1;
+
+            if (data.length < fetchSize) {
+                break;
+            }
+        }
+
+        // Normalize closeTime on the fully assembled data
+        this.normalizeCloseTime(allData);
+        return allData;
+    }
+
+    protected getSupportedTimeframes(): Set<string> {
+        return new Set(['1', '3', '5', '15', '30', '60', '120', '240', 'D', 'W', 'M']);
+    }
+
+    protected async _getMarketDataNative(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
         try {
             // Check cache first
             // Skip cache if eDate is undefined (live request) to ensure we get fresh data
@@ -205,7 +277,6 @@ export class BinanceProvider implements IProvider {
             if (shouldCache) {
                 const cachedData = this.cacheManager.get(cacheParams);
                 if (cachedData) {
-                    //console.log('cache hit', tickerId, timeframe, limit, sDate, eDate);
                     return cachedData;
                 }
             }
@@ -219,56 +290,27 @@ export class BinanceProvider implements IProvider {
             // Determine if we need to paginate
             const needsPagination = this.shouldPaginate(timeframe, limit, sDate, eDate);
 
-            if (needsPagination && sDate && eDate) {
-                // Fetch all data using pagination, then apply limit if specified
-                const allData = await this.getMarketDataInterval(tickerId, timeframe, sDate, eDate);
-                const result = limit ? allData.slice(0, limit) : allData;
+            if (needsPagination) {
+                if (sDate && eDate) {
+                    // Forward pagination — already normalized by getMarketDataInterval
+                    const allData = await this.getMarketDataInterval(tickerId, timeframe, sDate, eDate);
+                    const result = limit ? allData.slice(0, limit) : allData;
 
-                // Cache the results with original params
-                this.cacheManager.set(cacheParams, result);
-                return result;
+                    this.cacheManager.set(cacheParams, result);
+                    return result;
+                } else if (limit && limit > 1000) {
+                    // Backward pagination — already normalized by getMarketDataBackwards
+                    const result = await this.getMarketDataBackwards(tickerId, timeframe, limit, eDate);
+
+                    this.cacheManager.set(cacheParams, result);
+                    return result;
+                }
             }
 
-            // Single request for <= 1000 candles
-            const baseUrl = await this.getBaseUrl();
-            let url = `${baseUrl}/klines?symbol=${tickerId}&interval=${interval}`;
+            // Single chunk — fetch raw, then normalize
+            const data = await this._fetchRawChunk(tickerId, timeframe, limit, sDate, eDate);
+            this.normalizeCloseTime(data);
 
-            //example https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1000
-            if (limit) {
-                url += `&limit=${Math.min(limit, 1000)}`; // Cap at 1000 for single request
-            }
-
-            if (sDate) {
-                url += `&startTime=${sDate}`;
-            }
-            if (eDate) {
-                url += `&endTime=${eDate}`;
-            }
-
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
-
-            const data = result.map((item) => {
-                return {
-                    openTime: parseInt(item[0]),
-                    open: parseFloat(item[1]),
-                    high: parseFloat(item[2]),
-                    low: parseFloat(item[3]),
-                    close: parseFloat(item[4]),
-                    volume: parseFloat(item[5]),
-                    closeTime: parseInt(item[6]),
-                    quoteAssetVolume: parseFloat(item[7]),
-                    numberOfTrades: parseInt(item[8]),
-                    takerBuyBaseAssetVolume: parseFloat(item[9]),
-                    takerBuyQuoteAssetVolume: parseFloat(item[10]),
-                    ignore: item[11],
-                };
-            });
-
-            // Cache the results
             if (shouldCache) {
                 this.cacheManager.set(cacheParams, data);
             }
@@ -292,21 +334,8 @@ export class BinanceProvider implements IProvider {
         // If we have both start and end dates, calculate required candles
         if (sDate && eDate) {
             const interval = timeframe_to_binance[timeframe.toUpperCase()];
-            const timeframeDurations = {
-                '1m': 60 * 1000,
-                '3m': 3 * 60 * 1000,
-                '5m': 5 * 60 * 1000,
-                '15m': 15 * 60 * 1000,
-                '30m': 30 * 60 * 1000,
-                '1h': 60 * 60 * 1000,
-                '2h': 2 * 60 * 60 * 1000,
-                '4h': 4 * 60 * 60 * 1000,
-                '1d': 24 * 60 * 60 * 1000,
-                '1w': 7 * 24 * 60 * 60 * 1000,
-                '1M': 30 * 24 * 60 * 60 * 1000,
-            };
 
-            const intervalDuration = timeframeDurations[interval];
+            const intervalDuration = INTERVAL_DURATION_MS[interval];
             if (intervalDuration) {
                 const requiredCandles = Math.ceil((eDate - sDate) / intervalDuration);
                 // Need pagination if date range requires more than 1000 candles
@@ -318,6 +347,7 @@ export class BinanceProvider implements IProvider {
     }
 
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
+        tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
         try {
             // tickerId comes in as "BTCUSDT" or "BTCUSDT.P"
             // We keep it EXACTLY as is for ticker field (Pine Script includes .P)
@@ -445,4 +475,5 @@ export class BinanceProvider implements IProvider {
             return null;
         }
     }
+
 }

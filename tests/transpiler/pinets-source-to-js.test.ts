@@ -34,15 +34,18 @@ describe('Transpiler', () => {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high, low, hlc3, volume} = $.data;
   const {plotchar, color, plot, na, nz} = $.core;
   const ta = $.ta;
   const math = $.math;
   const p0 = $.param(open, undefined, 'p0');
-  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, NaN));
-  $.let.glb1_n_a = $.init($.let.glb1_n_a, NaN);
-  const p1 = $.param($.let.glb1_n_a, undefined, 'p1');
-  if (na(p1)) {
+  const p1 = $.param(na.__value, undefined, 'p1');
+  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, p1));
+  $.let.glb1_n_a = $.init($.let.glb1_n_a, na.__value);
+  const p2 = na.param($.let.glb1_n_a, undefined, 'p2');
+  const temp_1 = na.any(p2);
+  if (temp_1) {
     $.set($.let.glb1_n_a, $.get(close, 0));
   }
 }`;
@@ -86,17 +89,21 @@ describe('Transpiler', () => {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high, low, hlc3, volume} = $.data;
   const {plotchar, color, plot, na, nz} = $.core;
   const ta = $.ta;
   const math = $.math;
   const p0 = $.param(open, undefined, 'p0');
-  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, NaN));
-  $.let.glb1_n_a = $.init($.let.glb1_n_a, NaN);
-  const p1 = $.param($.let.glb1_n_a, undefined, 'p1');
-  if (na(p1)) {
+  const p1 = $.param(na.__value, undefined, 'p1');
+  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, p1));
+  $.let.glb1_n_a = $.init($.let.glb1_n_a, na.__value);
+  const p2 = na.param($.let.glb1_n_a, undefined, 'p2');
+  const temp_1 = na.any(p2);
+  if (temp_1) {
     $.set($.let.glb1_n_a, $.get(close, 0));
   }
+  ;
   return {
     open,
     close: close,
@@ -135,17 +142,70 @@ if (na(n_a)) {
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {open, close} = $.data;
   const {na, nz} = $.pine;
   const ta = $.ta;
   const math = $.math;
   const p0 = $.param(open, undefined, 'p0');
-  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, NaN));
-  $.let.glb1_n_a = $.init($.let.glb1_n_a, NaN);
-  const p1 = $.param($.let.glb1_n_a, undefined, 'p1');
-  if (na(p1)) {
+  const p1 = $.param(na.__value, undefined, 'p1');
+  $.let.glb1_lowest_signaled_price = $.init($.let.glb1_lowest_signaled_price, nz(p0, p1));
+  $.let.glb1_n_a = $.init($.let.glb1_n_a, na.__value);
+  const p2 = na.param($.let.glb1_n_a, undefined, 'p2');
+  const temp_1 = na.any(p2);
+  if (temp_1) {
     $.set($.let.glb1_n_a, $.get(close, 0));
   }
+}`;
+
+        expect(result).toBe(expected_code);
+    });
+
+    it('unary operator in expressions', async () => {
+        const fakeContext = {};
+        const transformer = transpile.bind(fakeContext);
+
+        // we expect the transpiler to wrap the code in a context function and add missing namespaces
+        const source = `//@version=6
+indicator("RSI Divergence Detector", overlay=false)
+
+
+up = ta.rma(math.max(ta.change(close), 0), 14)
+down = ta.rma(-math.min(ta.change(close), 0), 14)`;
+
+        let transpiled = transformer(source);
+
+        console.log(transpiled.toString());
+        const result = transpiled.toString().trim();
+
+        /* prettier-ignore */
+        const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
+  const {close} = $.data;
+  const {ta, math, indicator} = $.pine;
+  const p0 = $.param('RSI Divergence Detector', undefined, 'p0');
+  const p1 = $.param({
+    overlay: false
+  }, undefined, 'p1');
+  indicator(p0, p1);
+  const p2 = ta.param(close, undefined, 'p2');
+  const temp_1 = ta.change(p2, "_ta0");
+  const p3 = math.param(temp_1, undefined, 'p3');
+  const p4 = math.param(0, undefined, 'p4');
+  const temp_2 = math.max(p3, p4);
+  const p5 = ta.param(temp_2, undefined, 'p5');
+  const p6 = ta.param(14, undefined, 'p6');
+  const temp_3 = ta.rma(p5, p6, "_ta1");
+  $.let.glb1_up = $.init($.let.glb1_up, temp_3);
+  const p7 = ta.param(close, undefined, 'p7');
+  const temp_4 = ta.change(p7, "_ta2");
+  const p8 = math.param(temp_4, undefined, 'p8');
+  const p9 = math.param(0, undefined, 'p9');
+  const temp_5 = math.min(p8, p9);
+  const p10 = ta.param(-temp_5, undefined, 'p10');
+  const p11 = ta.param(14, undefined, 'p11');
+  const temp_6 = ta.rma(p10, p11, "_ta3");
+  $.let.glb1_down = $.init($.let.glb1_down, temp_6);
 }`;
 
         expect(result).toBe(expected_code);
@@ -174,19 +234,24 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {open, close} = $.data;
   const {input} = $.pine;
   const p0 = input.param({
     title: 'Fast Length',
     defval: 12
   }, undefined, 'p0');
-  const temp_1 = input.int(p0);
+  const temp_1 = input.int(p0, {
+    __varId: "_int"
+  });
   $.let.glb1__int = $.init($.let.glb1__int, temp_1);
   const p1 = input.param({
     title: 'String Input',
     defval: "Hello"
   }, undefined, 'p1');
-  const temp_2 = input.string(p1);
+  const temp_2 = input.string(p1, {
+    __varId: "_string"
+  });
   $.let.glb1__string = $.init($.let.glb1__string, temp_2);
   const p2 = input.param(10.0, undefined, 'p2');
   const p3 = input.param("float input", undefined, 'p3');
@@ -195,19 +260,25 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     maxval: 100.0,
     step: 0.1
   }, undefined, 'p4');
-  const temp_3 = input.float(p2, p3, p4);
+  const temp_3 = input.float(p2, p3, p4, {
+    __varId: "_float"
+  });
   $.let.glb1__float = $.init($.let.glb1__float, temp_3);
   const p5 = input.param({
     title: 'Close Source',
     defval: close
   }, undefined, 'p5');
-  const temp_4 = input.any(p5);
+  const temp_4 = input.any(p5, {
+    __varId: "src_close"
+  });
   $.let.glb1_src_close = $.init($.let.glb1_src_close, temp_4);
   const p6 = input.param({
     title: 'Open Source',
     defval: open
   }, undefined, 'p6');
-  const temp_5 = input.any(p6);
+  const temp_5 = input.any(p6, {
+    __varId: "src_open"
+  });
   $.let.glb1_src_open = $.init($.let.glb1_src_open, temp_5);
 }`;
 
@@ -237,6 +308,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {high, low, close} = $.data;
   const {ta, na} = $.pine;
   const {open} = $.data;
@@ -245,7 +317,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p1 = ta.param(14, undefined, 'p1');
   const temp_1 = ta.sma(p0, p1, "_ta0");
   $.const.glb1_sma = $.init($.const.glb1_sma, temp_1);
-  if ($.math.__eq($.get(low, 0), NaN)) {
+  if ($.pine.math.__eq($.get(low, 0), $.get(na.__value, 0))) {
     $.const.if2_data3 = $.init($.const.if2_data3, $.get(high, 0));
   }
 }`;
@@ -299,6 +371,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const math = $.math;
@@ -373,6 +446,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const p0 = ta.param(close, undefined, 'p0');
@@ -406,17 +480,20 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {ta, plot, na, bool} = $.pine;
   $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, 10);
   const p0 = plot.param($.let.glb1_highUsePivot, undefined, 'p0');
   const p1 = ta.param($.let.glb1_highUsePivot, undefined, 'p1');
   const temp_1 = ta.change(p1, "_ta0");
   const p2 = $.param(temp_1, undefined, 'p2');
-  const p3 = plot.param(bool(p2) ? NaN : "#FF0000", undefined, 'p3');
+  const p3 = plot.param(bool(p2) ? $.get(na.__value, 0) : "#FF0000", undefined, 'p3');
   const p4 = plot.param({
     color: p3
   }, undefined, 'p4');
-  const temp_2 = plot.any(p0, p4);
+  const temp_2 = plot.any(p0, p4, {
+    __callsiteId: "#0"
+  });
   temp_2;
 }`;
 
@@ -449,6 +526,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const {ta, fixnan} = $.pine;
   const p0 = ta.param(close, undefined, 'p0');
@@ -499,10 +577,11 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
-  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0));
-  $.const.glb1_red_candle = $.init($.const.glb1_red_candle, $.get(close, 0) < $.get(open, 0));
+  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.pine.math.__gt($.get(close, 0), $.get(open, 0)));
+  $.const.glb1_red_candle = $.init($.const.glb1_red_candle, $.pine.math.__lt($.get(close, 0), $.get(open, 0)));
   $.const.glb1_previous_green_candle = $.init($.const.glb1_previous_green_candle, $.get($.const.glb1_green_candle, 1));
   const p0 = ta.param(close, 1, 'p0');
   const p1 = ta.param(9, undefined, 'p1');
@@ -512,8 +591,8 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p3 = ta.param(18, undefined, 'p3');
   const temp_2 = ta.ema(p2, p3, "_ta1");
   $.const.glb1_ema18 = $.init($.const.glb1_ema18, temp_2);
-  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.get($.const.glb1_ema9, 0) > $.get($.const.glb1_ema18, 0));
-  $.const.glb1_bear_bias = $.init($.const.glb1_bear_bias, $.get($.const.glb1_ema9, 0) < $.get($.const.glb1_ema18, 0));
+  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.pine.math.__gt($.get($.const.glb1_ema9, 0), $.get($.const.glb1_ema18, 0)));
+  $.const.glb1_bear_bias = $.init($.const.glb1_bear_bias, $.pine.math.__lt($.get($.const.glb1_ema9, 0), $.get($.const.glb1_ema18, 0)));
 }`;
 
         expect(result).toBe(expected_code);
@@ -538,16 +617,17 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
-  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0) ? 1 : 0);
+  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.pine.math.__gt($.get(close, 0), $.get(open, 0)) ? 1 : 0);
   const p0 = ta.param(close, undefined, 'p0');
   const p1 = ta.param(9, undefined, 'p1');
   const temp_1 = ta.ema(p0, p1, "_ta0");
   const p2 = ta.param(close, undefined, 'p2');
   const p3 = ta.param(18, undefined, 'p3');
   const temp_2 = ta.ema(p2, p3, "_ta1");
-  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, temp_1 > temp_2 ? 1 : 0);
+  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.pine.math.__gt(temp_1, temp_2) ? 1 : 0);
 }`;
 
         expect(result).toBe(expected_code);
@@ -573,6 +653,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const {plot} = $.core;
   $.const.glb1_res = $.init($.const.glb1_res, open);
@@ -581,21 +662,27 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p2 = plot.param({
     color: "white"
   }, undefined, 'p2');
-  const temp_1 = plot.any(p0, p1, p2);
+  const temp_1 = plot.any(p0, p1, p2, {
+    __callsiteId: "#0"
+  });
   temp_1;
   const p3 = plot.param($.get(close, 0) && $.get(open, 0), undefined, 'p3');
   const p4 = plot.param("plot2", undefined, 'p4');
   const p5 = plot.param({
     color: "white"
   }, undefined, 'p5');
-  const temp_2 = plot.any(p3, p4, p5);
+  const temp_2 = plot.any(p3, p4, p5, {
+    __callsiteId: "#1"
+  });
   temp_2;
   const p6 = plot.param(-$.get($.const.glb1_res, 0), undefined, 'p6');
   const p7 = plot.param("plot3", undefined, 'p7');
   const p8 = plot.param({
     color: "white"
   }, undefined, 'p8');
-  const temp_3 = plot.any(p6, p7, p8);
+  const temp_3 = plot.any(p6, p7, p8, {
+    __callsiteId: "#2"
+  });
   temp_3;
 }`;
 
@@ -612,7 +699,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
             let aa = 0;
 
-            if (_cc > 1) {
+            if ($.pine.math.__gt(_cc, 1)) {
                 let bb = 1;
                 let cc = close;
                 let dd = close[1];
@@ -626,34 +713,34 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
                 aa = 1;
             }
-            if (_cc[0] > 1) {
+            if ($.pine.math.__gt(_cc[0], 1)) {
                 aa = 2;
             }
-            if (_cc[1] > 1) {
+            if ($.pine.math.__gt(_cc[1], 1)) {
                 aa = 3;
             }
-            if (_cc[aa] > 1) {
+            if ($.pine.math.__gt(_cc[aa], 1)) {
                 aa = 3;
             }
-            if (_cc[aa[0]] > 1) {
+            if ($.pine.math.__gt(_cc[aa[0]], 1)) {
                 aa = 3;
             }
-            if (_cc[aa[1]] > 1) {
+            if ($.pine.math.__gt(_cc[aa[1]], 1)) {
                 aa = 3;
             }
-            if (close > 1) {
+            if ($.pine.math.__gt(close, 1)) {
                 aa = 4;
             }
-            if (close[0] > 1) {
+            if ($.pine.math.__gt(close[0], 1)) {
                 aa = 5;
             }
-            if (close[1] > 1) {
+            if ($.pine.math.__gt(close[1], 1)) {
                 aa = 6;
             }
-            if (close[aa] > 1) {
+            if ($.pine.math.__gt(close[aa], 1)) {
                 aa = 6;
             }
-            if (close[aa[1]] > 1) {
+            if ($.pine.math.__gt(close[aa[1]], 1)) {
                 aa = 6;
             }
         };
@@ -664,10 +751,11 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
   $.let.glb1_aa = $.init($.let.glb1_aa, 0);
-  if ($.get($.const.glb1__cc, 0) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 0), 1)) {
     $.let.if2_bb = $.init($.let.if2_bb, 1);
     $.let.if2_cc = $.init($.let.if2_cc, close);
     $.let.if2_dd = $.init($.let.if2_dd, $.get(close, 1));
@@ -679,34 +767,44 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.let.if2_cc3 = $.init($.let.if2_cc3, $.get($.const.glb1__cc, $.get($.let.glb1_aa, 99)));
     $.set($.let.glb1_aa, 1);
   }
-  if ($.get($.const.glb1__cc, 0) > 1) {
+  ;
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 0), 1)) {
     $.set($.let.glb1_aa, 2);
   }
-  if ($.get($.const.glb1__cc, 1) > 1) {
+  ;
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 1), 1)) {
     $.set($.let.glb1_aa, 3);
   }
-  if ($.get($.const.glb1__cc, $.get($.let.glb1_aa, 0)) > 1) {
+  ;
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.get($.let.glb1_aa, 0)), 1)) {
     $.set($.let.glb1_aa, 3);
   }
-  if ($.get($.const.glb1__cc, $.let.glb1_aa[0]) > 1) {
+  ;
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.let.glb1_aa[0]), 1)) {
     $.set($.let.glb1_aa, 3);
   }
-  if ($.get($.const.glb1__cc, $.let.glb1_aa[1]) > 1) {
+  ;
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.let.glb1_aa[1]), 1)) {
     $.set($.let.glb1_aa, 3);
   }
-  if ($.get(close, 0) > 1) {
+  ;
+  if ($.pine.math.__gt($.get(close, 0), 1)) {
     $.set($.let.glb1_aa, 4);
   }
-  if ($.get(close, 0) > 1) {
+  ;
+  if ($.pine.math.__gt($.get(close, 0), 1)) {
     $.set($.let.glb1_aa, 5);
   }
-  if ($.get(close, 1) > 1) {
+  ;
+  if ($.pine.math.__gt($.get(close, 1), 1)) {
     $.set($.let.glb1_aa, 6);
   }
-  if ($.get(close, $.get($.let.glb1_aa, 0)) > 1) {
+  ;
+  if ($.pine.math.__gt($.get(close, $.get($.let.glb1_aa, 0)), 1)) {
     $.set($.let.glb1_aa, 6);
   }
-  if ($.get(close, $.let.glb1_aa[1]) > 1) {
+  ;
+  if ($.pine.math.__gt($.get(close, $.let.glb1_aa[1]), 1)) {
     $.set($.let.glb1_aa, 6);
   }
 }`;
@@ -786,10 +884,13 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   $.let.glb1_aa = $.init($.let.glb1_aa, 10);
   $.let.glb1__cc = $.init($.let.glb1__cc, close);
+  let __lg0 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
     $.let.for2_bb = $.init($.let.for2_bb, 1);
     $.let.for2_cc = $.init($.let.for2_cc, close);
     $.set($.let.for2_cc, $.get(close, 1));
@@ -804,34 +905,64 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.let.for2_cc3 = $.init($.let.for2_cc3, $.get($.let.glb1__cc, $.get($.let.glb1_aa, 99)));
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg1 = 0;
   for (let i = 0; i < 10; i++) {
+    if (++__lg1 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg1)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg2 = 0;
   for (let i = 0; i < $.get($.let.glb1_aa, 0); i++) {
+    if (++__lg2 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg2)");
     $.set($.let.glb1__cc, $.get($.let.glb1__cc, i));
   }
+  ;
+  let __lg3 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 0); i++) {
+    if (++__lg3 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg3)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg4 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    if (++__lg4 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg4)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg5 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.get($.let.glb1_aa, 0)); i++) {
+    if (++__lg5 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg5)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg6 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.let.glb1_aa[99]); i++) {
+    if (++__lg6 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg6)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg7 = 0;
   for (let i = 0; i < $.get(close, 0); i++) {
+    if (++__lg7 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg7)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg8 = 0;
   for (let i = 0; i < $.get(close, 1); i++) {
+    if (++__lg8 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg8)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg9 = 0;
   for (let i = 0; i < $.get(close, $.get($.let.glb1_aa, 0)); i++) {
+    if (++__lg9 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg9)");
     $.set($.let.glb1_aa, i);
   }
+  ;
+  let __lg10 = 0;
   for (let i = 0; i < $.get(close, $.let.glb1_aa[99]); i++) {
+    if (++__lg10 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg10)");
     $.set($.let.glb1_aa, i);
   }
 }`;
@@ -896,45 +1027,48 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   const math = $.math;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function angle(src) {
-    const temp_1 = $.peekId();
-    $.const.fn1__callId = $.init($.const.fn1__callId, temp_1);
-    $.const.fn1_rad2degree = $.init($.const.fn1_rad2degree, 180 / Math.PI);
-    const p0 = ta.param(14, undefined, 'p0');
-    const temp_2 = ta.atr(p0, $.get($.const.fn1__callId, 0) + "_ta0");
-    const p1 = math.param(($.get(src, 0) - $.get(src, 1)) / temp_2, undefined, 'p1');
-    const temp_3 = math.atan(p1);
-    $.const.fn1_ang = $.init($.const.fn1_ang, $.get($.const.fn1_rad2degree, 0) * temp_3);
-    return $.precision($.get($.const.fn1_ang, 0));
+    const $$ = $.peekCtx();
+    $$.const.fn1_rad2degree = $.init($$.const.fn1_rad2degree, 180 / Math.PI);
+    const p0 = ta.param(14, undefined, $$.id + 'p0');
+    const temp_1 = ta.atr(p0, $$.id + "_ta0");
+    const p1 = math.param(($.get(src, 0) - $.get(src, 1)) / temp_1, undefined, $$.id + 'p1');
+    const temp_2 = math.atan(p1);
+    $$.const.fn1_ang = $.init($$.const.fn1_ang, $.get($$.const.fn1_rad2degree, 0) * temp_2);
+    return $.precision($.get($$.const.fn1_ang, 0));
   }
   function get_average(avg_src, avg_len) {
-    const temp_4 = $.peekId();
-    $.const.fn2__callId = $.init($.const.fn2__callId, temp_4);
-    $.let.fn2_bb = $.init($.let.fn2_bb, 1);
-    $.let.fn2_cc = $.init($.let.fn2_cc, close);
-    $.set($.let.fn2_cc, $.get(close, 1));
-    $.set($.let.fn2_cc, $.get($.let.fn2_bb, 2));
-    $.set($.let.fn2_cc, $.get($.const.glb1_aa, $.get($.let.fn2_bb, 0)));
-    $.let.fn2_dd = $.init($.let.fn2_dd, $.get(close, 1));
-    $.let.fn2_ee = $.init($.let.fn2_ee, $.get(close, $.get($.const.glb1_aa, 0)));
-    $.let.fn2_ff = $.init($.let.fn2_ff, $.get(close, $.get($.const.glb1_aa, 99)));
-    $.let.fn2_cc0 = $.init($.let.fn2_cc0, $.get($.const.glb1__cc, 0));
-    $.let.fn2_cc1 = $.init($.let.fn2_cc1, $.get($.const.glb1__cc, 1));
-    $.let.fn2_cc2 = $.init($.let.fn2_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
-    $.let.fn2_cc3 = $.init($.let.fn2_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
-    $.let.fn2_ret_val = $.init($.let.fn2_ret_val, 0);
+    const $$ = $.peekCtx();
+    $$.let.fn2_bb = $.init($$.let.fn2_bb, 1);
+    $$.let.fn2_cc = $.init($$.let.fn2_cc, close);
+    $.set($$.let.fn2_cc, $.get(close, 1));
+    $.set($$.let.fn2_cc, $.get($$.let.fn2_bb, 2));
+    $.set($$.let.fn2_cc, $.get($.const.glb1_aa, $.get($$.let.fn2_bb, 0)));
+    $$.let.fn2_dd = $.init($$.let.fn2_dd, $.get(close, 1));
+    $$.let.fn2_ee = $.init($$.let.fn2_ee, $.get(close, $.get($.const.glb1_aa, 0)));
+    $$.let.fn2_ff = $.init($$.let.fn2_ff, $.get(close, $.get($.const.glb1_aa, 99)));
+    $$.let.fn2_cc0 = $.init($$.let.fn2_cc0, $.get($.const.glb1__cc, 0));
+    $$.let.fn2_cc1 = $.init($$.let.fn2_cc1, $.get($.const.glb1__cc, 1));
+    $$.let.fn2_cc2 = $.init($$.let.fn2_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
+    $$.let.fn2_cc3 = $.init($$.let.fn2_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
+    $$.let.fn2_ret_val = $.init($$.let.fn2_ret_val, 0);
+    let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
-      $.set($.let.fn2_ret_val, $.get($.let.fn2_ret_val, 0) + $.get(avg_src, i));
+      if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
+      $.set($$.let.fn2_ret_val, $.get($$.let.fn2_ret_val, 0) + $.get(avg_src, i));
     }
-    if ($.math.__eq($.get(avg_len, 0), 0)) {
-      $.set($.let.fn2_ret_val, $.get($.let.fn2_cc, 1));
+    ;
+    if ($.pine.math.__eq($.get(avg_len, 0), 0)) {
+      $.set($$.let.fn2_ret_val, $.get($$.let.fn2_cc, 1));
     }
-    return $.precision($.get($.let.fn2_ret_val, 0) / $.get($.get(avg_len, 0), 0));
+    ;
+    return $.precision($.get($$.let.fn2_ret_val, 0) / $.get(avg_len, 0));
   }
   const p2 = $.param(close, undefined, 'p2');
   const p3 = $.param(14, undefined, 'p3');
@@ -978,15 +1112,16 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {high} = $.data;
   const {open, close} = $.data;
   const {array} = $.pine;
   const p0 = array.param(5, undefined, 'p0');
   const temp_1 = array.new_float(p0);
   $.let.glb1_a = $.init($.let.glb1_a, temp_1);
-  $.get($.let.glb1_a, 0).fill($.get(close, 1) - $.get(open, 0));
+  $.get($.let.glb1_a, 0)?.fill?.($.get(close, 1) - $.get(open, 0));
   $.let.glb1_res = $.init($.let.glb1_res, $.get($.let.glb1_a, 0));
-  $.let.glb1_i = $.init($.let.glb1_i, $.get($.let.glb1_a, 0).indexof($.get(high, 0)));
+  $.let.glb1_i = $.init($.let.glb1_i, $.get($.let.glb1_a, 0)?.indexof?.($.get(high, 0)));
 }`;
 
         expect(result).toBe(expected_code);
@@ -1023,14 +1158,14 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const {plot, plotchar, request, ta} = $.pine;
   function foo() {
-    const temp_2 = $.peekId();
-    $.const.fn1__callId = $.init($.const.fn1__callId, temp_2);
-    $.const.fn1_oo = $.init($.const.fn1_oo, open);
-    $.const.fn1_cc = $.init($.const.fn1_cc, close);
-    return $.precision([[$.get($.const.fn1_oo, 0), $.get($.const.fn1_cc, 0)]]);
+    const $$ = $.peekCtx();
+    $$.const.fn1_oo = $.init($$.const.fn1_oo, open);
+    $$.const.fn1_cc = $.init($$.const.fn1_cc, close);
+    return $.precision([[$.get($$.const.fn1_oo, 0), $.get($$.const.fn1_cc, 0)]]);
   }
   {
     $.const.glb1_temp_1 = $.init($.const.glb1_temp_1, $.call(foo, "_fn0"));
@@ -1101,33 +1236,37 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close} = $.data;
   const ta = $.ta;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function get_average(avg_src, avg_len) {
-    const temp_1 = $.peekId();
-    $.const.fn1__callId = $.init($.const.fn1__callId, temp_1);
-    $.let.fn1_bb = $.init($.let.fn1_bb, 1);
-    $.let.fn1_cc = $.init($.let.fn1_cc, close);
-    $.set($.let.fn1_cc, $.get(close, 1));
-    $.set($.let.fn1_cc, $.get($.let.fn1_bb, 2));
-    $.set($.let.fn1_cc, $.get($.const.glb1_aa, $.get($.let.fn1_bb, 0)));
-    $.let.fn1_dd = $.init($.let.fn1_dd, $.get(close, 1));
-    $.let.fn1_ee = $.init($.let.fn1_ee, $.get(close, $.get($.const.glb1_aa, 0)));
-    $.let.fn1_ff = $.init($.let.fn1_ff, $.get(close, $.get($.const.glb1_aa, 99)));
-    $.let.fn1_cc0 = $.init($.let.fn1_cc0, $.get($.const.glb1__cc, 0));
-    $.let.fn1_cc1 = $.init($.let.fn1_cc1, $.get($.const.glb1__cc, 1));
-    $.let.fn1_cc2 = $.init($.let.fn1_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
-    $.let.fn1_cc3 = $.init($.let.fn1_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
-    $.let.fn1_ret_val = $.init($.let.fn1_ret_val, 0);
+    const $$ = $.peekCtx();
+    $$.let.fn1_bb = $.init($$.let.fn1_bb, 1);
+    $$.let.fn1_cc = $.init($$.let.fn1_cc, close);
+    $.set($$.let.fn1_cc, $.get(close, 1));
+    $.set($$.let.fn1_cc, $.get($$.let.fn1_bb, 2));
+    $.set($$.let.fn1_cc, $.get($.const.glb1_aa, $.get($$.let.fn1_bb, 0)));
+    $$.let.fn1_dd = $.init($$.let.fn1_dd, $.get(close, 1));
+    $$.let.fn1_ee = $.init($$.let.fn1_ee, $.get(close, $.get($.const.glb1_aa, 0)));
+    $$.let.fn1_ff = $.init($$.let.fn1_ff, $.get(close, $.get($.const.glb1_aa, 99)));
+    $$.let.fn1_cc0 = $.init($$.let.fn1_cc0, $.get($.const.glb1__cc, 0));
+    $$.let.fn1_cc1 = $.init($$.let.fn1_cc1, $.get($.const.glb1__cc, 1));
+    $$.let.fn1_cc2 = $.init($$.let.fn1_cc2, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 0)));
+    $$.let.fn1_cc3 = $.init($$.let.fn1_cc3, $.get($.const.glb1__cc, $.get($.const.glb1_aa, 99)));
+    $$.let.fn1_ret_val = $.init($$.let.fn1_ret_val, 0);
+    let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
-      $.set($.let.fn1_ret_val, $.get($.let.fn1_ret_val, 0) + $.get(avg_src, i));
+      if (++__lg0 > __maxLoops) throw new Error("Loop exceeded maximum iterations (__lg0)");
+      $.set($$.let.fn1_ret_val, $.get($$.let.fn1_ret_val, 0) + $.get(avg_src, i));
     }
-    if ($.math.__eq($.get(avg_len, 0), 0)) {
-      $.set($.let.fn1_ret_val, $.get($.let.fn1_cc, 1));
+    ;
+    if ($.pine.math.__eq($.get(avg_len, 0), 0)) {
+      $.set($$.let.fn1_ret_val, $.get($$.let.fn1_cc, 1));
     }
-    return $.precision($.get($.let.fn1_ret_val, 0) / $.get($.get(avg_len, 0), 0));
+    ;
+    return $.precision($.get($$.let.fn1_ret_val, 0) / $.get(avg_len, 0));
   }
   const p0 = $.param(close, undefined, 'p0');
   const p1 = $.param(14, undefined, 'p1');
@@ -1178,6 +1317,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
         /* prettier-ignore */
         const expected_code = `async $ => {
+  const __maxLoops = $.__maxLoops || 500000;
   const {close, open, high} = $.data;
   const {Type, ta} = $.pine;
   const p0 = $.param({
@@ -1187,8 +1327,8 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     active: "bool"
   }, undefined, 'p0');
   $.const.glb1_Trade = $.init($.const.glb1_Trade, Type(p0));
-  $.let.glb1_trade = $.init($.let.glb1_trade, $.get($.const.glb1_Trade, 0).new($.get(close, 0), $.get(open, 0), $.get(high, 0), $.get(close, 0) > $.get(open, 0)));
-  $.let.glb1_trade2 = $.init($.let.glb1_trade2, $.get($.let.glb1_trade, 0).copy());
+  $.let.glb1_trade = $.init($.let.glb1_trade, $.get($.const.glb1_Trade, 0)?.new?.($.get(close, 0), $.get(open, 0), $.get(high, 0), $.pine.math.__gt($.get(close, 0), $.get(open, 0))));
+  $.let.glb1_trade2 = $.init($.let.glb1_trade2, $.get($.let.glb1_trade, 0)?.copy?.());
   $.get($.let.glb1_trade2, 0).active = false;
   const p1 = ta.param($.get($.let.glb1_trade, 0).entry, undefined, 'p1');
   const p2 = ta.param(14, undefined, 'p2');
@@ -1204,60 +1344,93 @@ let src_open = input.any({ title: 'Open Source', defval: open });
         expect(result).toBe(expected_code);
     });
 
-    it('Context-bound namespace property access (display.data_window)', async () => {
+    it('Variable collision avoidance', async () => {
         const fakeContext = {};
         const transformer = transpile.bind(fakeContext);
 
         const source = (context) => {
-            const { close } = context.data;
-            const { input, display, plot } = context.pine;
+            const { open, close } = context.data;
+            const { plot, fill, indicator, color } = context.pine;
 
-            // Test that display.data_window is NOT transformed to $.get(display, 0).data_window
-            let signal_length = input.int({
-                title: 'Signal Smoothing',
-                minval: 1,
-                maxval: 50,
-                defval: 9,
-                display: display.data_window,
+            indicator({
+                shorttitle: 'BB',
+                title: 'Simple Bollinger Bands',
+                overlay: true,
+                timeframe: '',
+                timeframe_gaps: true,
             });
 
-            // Test that plot.style_columns is also NOT transformed
-            plot(close, { style: plot.style_columns });
+            // User defines variables named p1, p2 which conflict with transpiler's internal naming
+            let p1 = plot(close, 'Close', { color: '#F23645' });
+            let p2 = plot(open, 'Open', { color: '#089981' });
 
-            return { signal_length };
+            fill(p1, p2, { title: 'Background', color: color.rgb(33, 150, 243, 95) });
         };
 
         let transpiled = transformer(source);
+        const result = transpiled.toString().trim();
+        console.log(result);
 
-        console.log(transpiled.toString());
+        // The transpiler should generate different internal variable names (e.g. p3, p4, etc.)
+        // to avoid collision with user's p1 and p2.
+        // It should NOT try to redeclare p1 or p2 as const/internal params.
+
+        expect(result).not.toContain('const p1 =');
+        expect(result).not.toContain('const p2 =');
+        // It should correctly initialize the user variables
+        expect(result).toContain('$.let.glb1_p1 = $.init($.let.glb1_p1');
+        expect(result).toContain('$.let.glb1_p2 = $.init($.let.glb1_p2');
+
+        // It should use the user variables in the fill function
+        expect(result).toContain('fill.param($.let.glb1_p1');
+        expect(result).toContain('fill.param($.let.glb1_p2');
+    });
+
+    it('Logical expressions in function arguments - all variables transformed', async () => {
+        const fakeContext = {};
+        const transformer = transpile.bind(fakeContext);
+
+        const source = (context) => {
+            const { open, high, close } = context.data;
+            const { ta, plotshape, indicator } = context.pine;
+
+            indicator('test1');
+            let [supertrend, direction] = ta.supertrend(3, 10);
+            let buy = close > open;
+            let xs = high;
+
+            function foo(a) {
+                return a;
+            }
+
+            // Complex logical expression with multiple variables as function argument
+            plotshape(buy && xs != xs[1] && direction < 0, {
+                title: 'Strong BUY',
+            });
+
+            // Same expression as user function argument
+            foo(buy && xs != xs[1] && direction < 0);
+
+            // Same expression in direct assignment
+            const buyCond = buy && xs != xs[1] && direction < 0;
+        };
+
+        let transpiled = transformer(source);
         const result = transpiled.toString().trim();
 
-        /* prettier-ignore */
-        const expected_code = `async $ => {
-  const {close} = $.data;
-  const {input, display, plot} = $.pine;
-  const p0 = input.param(display.data_window, undefined, 'p0');
-  const p1 = input.param({
-    title: "Signal Smoothing",
-    minval: 1,
-    maxval: 50,
-    defval: 9,
-    display: p0
-  }, undefined, 'p1');
-  const temp_1 = input.int(p1);
-  $.let.glb1_signal_length = $.init($.let.glb1_signal_length, temp_1);
-  const p2 = plot.param(close, undefined, 'p2');
-  const p3 = plot.param(plot.style_columns, undefined, 'p3');
-  const p4 = plot.param({
-    style: p3
-  }, undefined, 'p4');
-  const temp_2 = plot.any(p2, p4);
-  temp_2;
-  return {
-    signal_length: $.let.glb1_signal_length
-  };
-}`;
+        // All three usages should transform variables consistently.
+        // != and < are transpiled to na-aware helpers $.pine.math.__neq() / __lt().
+        const expectedPattern =
+            /\$\.get\(\$\.let\.glb1_buy, 0\) && \$\.pine\.math\.__neq\(\$\.get\(\$\.let\.glb1_xs, 0\), \$\.get\(\$\.let\.glb1_xs, 1\)\) && \$\.pine\.math\.__lt\(\$\.get\(\$\.let\.glb1_direction, 0\), 0\)/g;
+        const matches = result.match(expectedPattern);
 
-        expect(result).toBe(expected_code);
+        // Should appear 3 times: in plotshape arg, foo arg, and buyCond assignment
+        expect(matches).not.toBeNull();
+        expect(matches!.length).toBe(3);
+
+        // Verify all variables are transformed (no bare 'buy', 'xs' identifiers)
+        // Use word boundaries to avoid matching 'glb1_buy'
+        expect(result).not.toMatch(/\bbuy && /);
+        expect(result).not.toMatch(/&& xs !=/);
     });
 });

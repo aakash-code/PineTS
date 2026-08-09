@@ -30,7 +30,15 @@ import { sin } from './methods/sin';
 import { sqrt } from './methods/sqrt';
 import { sum } from './methods/sum';
 import { tan } from './methods/tan';
+import { todegrees } from './methods/todegrees';
+import { toradians } from './methods/toradians';
 import { __eq } from './methods/__eq';
+import { __ge } from './methods/__ge';
+import { __gt } from './methods/__gt';
+import { __idiv } from './methods/__idiv';
+import { __le } from './methods/__le';
+import { __lt } from './methods/__lt';
+import { __neq } from './methods/__neq';
 
 const methods = {
   abs,
@@ -61,7 +69,15 @@ const methods = {
   sqrt,
   sum,
   tan,
-  __eq
+  todegrees,
+  toradians,
+  __eq,
+  __ge,
+  __gt,
+  __idiv,
+  __le,
+  __lt,
+  __neq
 };
 
 export class PineMath {
@@ -94,7 +110,15 @@ export class PineMath {
   sqrt: ReturnType<typeof methods.sqrt>;
   sum: ReturnType<typeof methods.sum>;
   tan: ReturnType<typeof methods.tan>;
+  todegrees: ReturnType<typeof methods.todegrees>;
+  toradians: ReturnType<typeof methods.toradians>;
   __eq: ReturnType<typeof methods.__eq>;
+  __ge: ReturnType<typeof methods.__ge>;
+  __gt: ReturnType<typeof methods.__gt>;
+  __idiv: ReturnType<typeof methods.__idiv>;
+  __le: ReturnType<typeof methods.__le>;
+  __lt: ReturnType<typeof methods.__lt>;
+  __neq: ReturnType<typeof methods.__neq>;
 
   constructor(private context: any) {
     // Install methods

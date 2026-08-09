@@ -1051,8 +1051,9 @@ describe('PineScript Language', () => {
 
         const expected = {
             nanVal: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
-            nanCompare: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
-            nanCompare2: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
+            // Pine: `na == na` and `x == na` evaluate to `na`, not false (TV-verified).
+            nanCompare: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
+            nanCompare2: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
         };
 
         expect(deepEqual(context.result, expected)).toBe(true);
@@ -2103,7 +2104,8 @@ describe('PineScript Language', () => {
         const expected = {
             nanVal: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
             nanArith: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
-            nanCompare: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
+            // Pine: `x == na` evaluates to `na`, not false (TV-verified).
+            nanCompare: [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
             nzResult: [999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999],
         };
 
@@ -2648,9 +2650,12 @@ describe('PineScript Language', () => {
         console.log('>>> TEST: Operator Precedence Complex');
         console.log('>>> result: ', context.result);
 
+        // RC2b (Pine int/int → int): `5 / 2` is integer division (= 2, not 2.5),
+        // so complex1 = 2 + 3*4 - 5/2 = 2 + 12 - 2 = 12; and complex2 =
+        // ((2+3)*(4-5))/2 = -5/2 = -2 (truncated toward zero, not -2.5).
         const expected = {
-            complex1: [11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5],
-            complex2: [-2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5],
+            complex1: [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12],
+            complex2: [-2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2],
             complex3: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
             complex4: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
         };

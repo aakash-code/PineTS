@@ -31,6 +31,10 @@ export const ASTFactory = {
         return this.createIdentifier(CONTEXT_NAME);
     },
 
+    createLocalContextIdentifier(): any {
+        return this.createIdentifier('$$');
+    },
+
     // Create $.kind.name
     createContextVariableReference(kind: string, name: string): any {
         const context = this.createContextIdentifier();
@@ -40,9 +44,32 @@ export const ASTFactory = {
         return this.createMemberExpression(this.createMemberExpression(context, kindId, false), nameId, false);
     },
 
+    // Create $$.kind.name
+    createLocalContextVariableReference(kind: string, name: string): any {
+        const context = this.createLocalContextIdentifier();
+        const kindId = this.createIdentifier(kind);
+        const nameId = this.createIdentifier(name);
+
+        return this.createMemberExpression(this.createMemberExpression(context, kindId, false), nameId, false);
+    },
+
+    // Create $.kind[dynamicKey]
+    createDynamicContextVariableReference(kind: string, dynamicKey: any): any {
+        const context = this.createContextIdentifier();
+        const kindId = this.createIdentifier(kind);
+        
+        return this.createMemberExpression(this.createMemberExpression(context, kindId, false), dynamicKey, true);
+    },
+
     // Create $.get($.kind.name, 0)
     createContextVariableAccess0(kind: string, name: string): any {
         const varRef = this.createContextVariableReference(kind, name);
+        return this.createGetCall(varRef, 0);
+    },
+
+    // Create $.get($.kind[dynamicKey], 0)
+    createDynamicContextVariableAccess0(kind: string, dynamicKey: any): any {
+        const varRef = this.createDynamicContextVariableReference(kind, dynamicKey);
         return this.createGetCall(varRef, 0);
     },
 
@@ -107,11 +134,40 @@ export const ASTFactory = {
         return this.createCallExpression(setMethod, [target, value]);
     },
 
-    // Create $.math.__eq(left, right)
+    // Create $.pine.math.__eq(left, right)
     createMathEqCall(left: any, right: any): any {
-        const mathObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('math'), false);
+        const pineObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('pine'), false);
+        const mathObj = this.createMemberExpression(pineObj, this.createIdentifier('math'), false);
         const eqMethod = this.createMemberExpression(mathObj, this.createIdentifier('__eq'), false);
         return this.createCallExpression(eqMethod, [left, right]);
+    },
+
+    // Create $.pine.math.__neq(left, right)
+    createMathNeqCall(left: any, right: any): any {
+        const pineObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('pine'), false);
+        const mathObj = this.createMemberExpression(pineObj, this.createIdentifier('math'), false);
+        const neqMethod = this.createMemberExpression(mathObj, this.createIdentifier('__neq'), false);
+        return this.createCallExpression(neqMethod, [left, right]);
+    },
+
+    // Create $.pine.math.<method>(left, right) — na-aware comparison helpers
+    // (__eq/__neq/__lt/__le/__gt/__ge). Routes relational/equality operators
+    // through the runtime so `na` propagates and the 1e-10 tolerance applies.
+    createMathCompareCall(method: string, left: any, right: any): any {
+        const pineObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('pine'), false);
+        const mathObj = this.createMemberExpression(pineObj, this.createIdentifier('math'), false);
+        const fn = this.createMemberExpression(mathObj, this.createIdentifier(method), false);
+        return this.createCallExpression(fn, [left, right]);
+    },
+
+    // Create $.pine.math.__idiv(left, right) — Pine integer division (int/int→int,
+    // truncated toward zero). Emitted by TypeInferencePass ONLY when both operands
+    // are provably int; float operands keep native `/`.
+    createMathIntDivCall(left: any, right: any): any {
+        const pineObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('pine'), false);
+        const mathObj = this.createMemberExpression(pineObj, this.createIdentifier('math'), false);
+        const fn = this.createMemberExpression(mathObj, this.createIdentifier('__idiv'), false);
+        return this.createCallExpression(fn, [left, right]);
     },
 
     createWrapperFunction(body: any): any {

@@ -9,11 +9,12 @@ export function __eq(context: any) {
         const valB = Series.from(b).get(0);
 
         if (typeof valA === 'number' && typeof valB === 'number') {
-            if (isNaN(valA) && isNaN(valB)) return true; // Treat NaNs as equal?
+            // Pine Script: any comparison with `na` evaluates to `na`, not false.
+            // na propagates — use `na(x == y)` to test for it.
+            if (isNaN(valA) || isNaN(valB)) return NaN;
 
-            if (isNaN(valA) || isNaN(valB)) return false; // One is NaN, other is not -> False.
-
-            return Math.abs(valA - valB) < 1e-8;
+            // TradingView treats values equal within an absolute 1e-10 tolerance.
+            return Math.abs(valA - valB) < 1e-10;
         }
 
         return valA === valB;

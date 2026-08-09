@@ -152,7 +152,7 @@ export class Lexer {
 
         // Check if this is a blank line (only whitespace followed by newline or EOF)
         // If so, skip indentation processing and keep position at whitespace
-        if (this.peek() === '\n' || this.peek() === '\0') {
+        if (this.peek() === '\n' || this.peek() === '\r' || this.peek() === '\0') {
             // Don't process indentation for blank lines
             // The whitespace will be skipped in the main loop
             return;
@@ -160,6 +160,20 @@ export class Lexer {
 
         // Convert spaces to indent levels (4 spaces = 1 level)
         indent += Math.floor(spaceCount / 4);
+
+        // Pine allows binary-operator (and comma / ternary `:` / logical
+        // and|or) line continuation. The continuation line is typically
+        // visually aligned past the operand of the previous line, which
+        // looks like a deeper indent — but it must NOT push a new block
+        // onto the indent stack. Without this guard, the lexer emits an
+        // INDENT for the continuation line and a matching DEDENT when
+        // the next real statement returns to the original block indent;
+        // the block parser sees that DEDENT and prematurely closes the
+        // surrounding function/if/for body, dropping subsequent
+        // statements (which then reference now-out-of-scope parameters).
+        if (this.isContinuationFromPrevToken()) {
+            return;
+        }
 
         const currentIndent = this.indentStack[this.indentStack.length - 1];
 
@@ -181,6 +195,31 @@ export class Lexer {
             }
         }
         // Same indentation - no INDENT/DEDENT
+    }
+
+    /**
+     * True when the most recently emitted token (skipping NEWLINE / COMMENT
+     * — those are layout, not content) is a token that requires a right-
+     * hand-side and therefore implies the next non-blank line is a
+     * continuation, not a new block. Mirrors the set the parser's
+     * `peekOperatorEx` already crosses NEWLINE for.
+     */
+    private isContinuationFromPrevToken(): boolean {
+        for (let i = this.tokens.length - 1; i >= 0; i--) {
+            const t = this.tokens[i];
+            if (t.type === TokenType.NEWLINE || t.type === TokenType.COMMENT) continue;
+            if (t.type === TokenType.OPERATOR) {
+                // `=>` introduces a new block (arrow function / method body),
+                // not a continuation — the next indent IS a real INDENT.
+                if (t.value === '=>') return false;
+                return true;
+            }
+            if (t.type === TokenType.COMMA) return true;
+            if (t.type === TokenType.COLON) return true;
+            if (t.type === TokenType.KEYWORD && (t.value === 'and' || t.value === 'or')) return true;
+            return false;
+        }
+        return false;
     }
 
     // Read comment
@@ -273,6 +312,12 @@ export class Lexer {
         let value = '';
         let hasDecimal = false;
 
+        // Handle numbers starting with dot (e.g., .5 instead of 0.5)
+        if (this.peek() === '.' && this.isDigit(this.peek(1))) {
+            hasDecimal = true;
+            value += this.advance(); // consume the dot
+        }
+
         while (this.pos < this.source.length) {
             const ch = this.peek();
 
@@ -298,7 +343,36 @@ export class Lexer {
             }
         }
 
-        this.addToken(TokenType.NUMBER, parseFloat(value));
+        // Check for scientific notation (e.g. 1e10, 1.5e-5)
+        if (this.pos < this.source.length) {
+            const ch = this.peek();
+            if (ch === 'e' || ch === 'E') {
+                const nextCh = this.peek(1);
+                if (this.isDigit(nextCh)) {
+                    // Case: 10e5
+                    value += this.advance(); // consume 'e'
+                    // consume digits
+                    while (this.pos < this.source.length && this.isDigit(this.peek())) {
+                        value += this.advance();
+                    }
+                } else if (nextCh === '+' || nextCh === '-') {
+                    // Case: 10e+5 or 10e-5
+                    const nextNextCh = this.peek(2);
+                    if (this.isDigit(nextNextCh)) {
+                        value += this.advance(); // consume 'e'
+                        value += this.advance(); // consume sign
+                        // consume digits
+                        while (this.pos < this.source.length && this.isDigit(this.peek())) {
+                            value += this.advance();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Preserve the raw literal text so float literals keep their decimal
+        // (`2.0` vs `2`, `.5`) through codegen — required for int/float inference.
+        this.addToken(TokenType.NUMBER, parseFloat(value), null, value);
     }
 
     // Read identifier or keyword
@@ -378,6 +452,11 @@ export class Lexer {
                 this.addToken(TokenType.COMMA, ch);
                 return true;
             case '.':
+                // Check if this is a number starting with dot (e.g., .5 instead of 0.5)
+                if (this.isDigit(this.peek(1))) {
+                    this.readNumber();
+                    return true;
+                }
                 this.advance();
                 this.addToken(TokenType.DOT, ch);
                 return true;
@@ -431,8 +510,8 @@ export class Lexer {
         return this.indentStack[this.indentStack.length - 1];
     }
 
-    addToken(type, value, indent = null) {
-        const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent());
+    addToken(type, value, indent = null, raw = null) {
+        const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent(), raw);
         this.tokens.push(token);
     }
 }
